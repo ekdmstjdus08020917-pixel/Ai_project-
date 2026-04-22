@@ -1,0 +1,15 @@
+#설정 및 환경변수
+config.py
+.env
+__pycache__/
+
+#데이터셋(이미지 파일들)
+dataset/
+*.png
+*.jpg
+*.jpeg
+
+#가상환경
+venv/
+.venv/
+
