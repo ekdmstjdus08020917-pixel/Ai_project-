@@ -15,6 +15,10 @@ from dotenv import load_dotenv
 import ollama
 from openai import OpenAI
 import uvicorn
+import io
+from PIL import Image
+from chandra.model import InferenceManager
+from chandra.model.schema import BatchInputItem
 
 # 데이터베이스 모듈 임포트
 from database import connectDatabase, createTable, saveAnalysisResult
@@ -23,6 +27,17 @@ from database import connectDatabase, createTable, saveAnalysisResult
 load_dotenv()
 
 app = FastAPI()
+
+# Chandra OCR 모델 전역 변수 (지연 로딩)
+chandraModel = None
+
+def getChandraModel():
+    """ Chandra OCR 모델을 초기화하고 반환합니다. """
+    global chandraModel
+    if chandraModel is None:
+        # 허깅페이스(hf) 방식을 사용하여 모델을 로드합니다 (최초 1회)
+        chandraModel = InferenceManager(method="hf")
+    return chandraModel
 
 # 서버 시작 시 DB 연결 확인 및 테이블 생성
 @app.on_event("startup")
@@ -64,10 +79,9 @@ def callGptModel(imageBase64, promptText):
     except Exception as e:
         return str(e)
 
-def callOllamaModel(imageBytes, promptText):
-    """ 로컬 Ollama(gemma4:e2b) 모델을 호출하여 이미지를 분석합니다. """
+def callOllamaModel(imageBytes, promptText, modelName="gemma4:e2b"):
+    """ 로컬 Ollama 모델을 호출하여 이미지를 분석합니다. """
     try:
-        modelName = os.getenv("OLLAMA_MODEL", "gemma4:e2b")
         response = ollama.generate(
             model=modelName,
             prompt=promptText,
@@ -77,28 +91,56 @@ def callOllamaModel(imageBytes, promptText):
     except Exception as e:
         return str(e)
 
+def callChandraOcrModel(imageBytes, promptText):
+    """ Chandra OCR 2 모델을 호출하여 이미지에서 텍스트를 추출하고 분석합니다. """
+    try:
+        # 바이트 데이터를 PIL 이미지로 변환
+        image = Image.open(io.BytesIO(imageBytes))
+        
+        # 모델 로드 (첫 호출 시 로드)
+        model = getChandraModel()
+        
+        # 입력 데이터 생성 (BatchInputItem 형식)
+        currentPrompt = promptText if promptText else "이미지의 내용을 텍스트로 추출해줘."
+        batchItem = BatchInputItem(image=image, prompt=currentPrompt)
+        
+        # 이미지 처리 및 결과 생성 (리스트 형태로 결과 반환됨)
+        results = model.generate([batchItem])
+        
+        # 결과 추출
+        if results and len(results) > 0:
+            # BatchOutputItem 객체에는 markdown, html, raw 등의 속성이 있습니다.
+            return results[0].markdown
+        
+        return "분석 결과가 없습니다."
+    except Exception as e:
+        return f"Chandra OCR 분석 오류: {str(e)}"
+
 @app.post("/analyze")
-async def analyzeImage(prompt: str = Form(...), file: UploadFile = File(...)):
+async def analyzeImage(
+    prompt: str = Form(...), 
+    model: str = Form("CHANDRA"), # 기본값 설정으로 422 에러 방지
+    file: UploadFile = File(...)
+):
     """ 
-    이미지 파일과 질문을 받아 지정된 모델로 분석합니다. 
-    가이드에 따라 에러 처리 JSON 형식을 준수합니다.
+    이미지 파일, 질문, 선택된 모델을 받아 분석합니다. 
     """
     try:
         # 파일 데이터 읽기
         fileContent = await file.read()
-        useModel = os.getenv("USE_MODEL", "OLLAMA")
+        useModel = model.upper() # 대문자로 통일
         
         # 분석 결과 변수 초기화
         analysisResult = ""
 
-        # 모델 스위칭 로직 (if-elif-else 명확히 구분)
+        # 모델 스위칭 로직
         if useModel == "GPT":
-            # GPT 호출을 위한 base64 인코딩
             imageBase64 = base64.b64encode(fileContent).decode('utf-8')
             analysisResult = callGptModel(imageBase64, prompt)
         elif useModel == "OLLAMA":
-            # Ollama 호출
             analysisResult = callOllamaModel(fileContent, prompt)
+        elif useModel == "CHANDRA":
+            analysisResult = callChandraOcrModel(fileContent, prompt)
         else:
             analysisResult = "지원하지 않는 모델 설정입니다."
 

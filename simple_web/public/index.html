@@ -172,6 +172,16 @@
         <!-- 질문 입력 -->
         <textarea id="prompt-input" placeholder="이미지에 대해 궁금한 점을 질문해 보세요..."></textarea>
 
+        <!-- 모델 선택 -->
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label style="font-size: 14px; color: #bb86fc;">분석 모델 선택</label>
+            <select id="model-select" style="width: 100%; padding: 12px; background: #2a2a2a; color: white; border: 1px solid #333; border-radius: 8px; cursor: pointer;">
+                <option value="OLLAMA">Ollama (gemma4:e2b)</option>
+                <option value="GPT">OpenAI (GPT-4o)</option>
+                <option value="CHANDRA">Chandra OCR 2</option>
+            </select>
+        </div>
+
         <!-- 분석 버튼 -->
         <button id="analyze-btn">AI 분석 시작하기</button>
     </div>
@@ -217,6 +227,7 @@
     analyzeBtn.addEventListener('click', async () => {
         const file = imageInput.files[0];
         const prompt = promptInput.value;
+        const model = document.getElementById('model-select').value;
 
         if (!file) {
             alert("먼저 이미지를 선택해 주세요!");
@@ -235,6 +246,7 @@
         const formData = new FormData();
         formData.append('file', file);
         formData.append('prompt', prompt);
+        formData.append('model', model);
 
         try {
             // Node.js 프록시 서버 호출

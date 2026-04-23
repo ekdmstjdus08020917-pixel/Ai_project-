@@ -27,19 +27,21 @@ const upload = multer({ storage: multer.memoryStorage() });
  */
 app.post('/proxy-analyze', upload.single('file'), async (req, res) => {
     try {
-        const { prompt } = req.body;
+        const prompt = req.body.prompt || "이 이미지를 분석해줘";
+        const model = req.body.model || "OLLAMA";
         const file = req.file;
 
         if (!file) {
-            return res.status(400).json({ success: false, message: "이미지 파일이 없습니다." });
+            return res.status(400).json({ success: false, message: "이미지 파일이 선택되지 않았습니다." });
         }
 
         // FastAPI 서버로 보낼 FormData 생성
         const formData = new FormData();
-        formData.append('prompt', prompt);
+        formData.append('prompt', String(prompt));
+        formData.append('model', String(model));
         formData.append('file', file.buffer, {
-            filename: file.originalname,
-            contentType: file.mimetype,
+            filename: file.originalname || 'image.jpg',
+            contentType: file.mimetype || 'image/jpeg',
         });
 
         // FastAPI 서버 호출 (8000번 포트)
