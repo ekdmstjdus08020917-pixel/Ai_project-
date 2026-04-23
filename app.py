@@ -16,10 +16,24 @@ import ollama
 from openai import OpenAI
 import uvicorn
 
+# 데이터베이스 모듈 임포트
+from database import connectDatabase, createTable, saveAnalysisResult
+
 # 환경 변수 로드
 load_dotenv()
 
 app = FastAPI()
+
+# 서버 시작 시 DB 연결 확인 및 테이블 생성
+@app.on_event("startup")
+def startup_event():
+    conn = connectDatabase()
+    if conn and conn.is_connected():
+        print("✅ 데이터베이스 연결 성공!")
+        createTable()  # 테이블이 없으면 생성
+        conn.close()
+    else:
+        print("❌ 데이터베이스 연결 실패! .env 설정을 확인하세요.")
 
 # CORS 설정 (가이드 준수: 모든 Origin/Method/Header 허용)
 app.add_middleware(
@@ -94,6 +108,9 @@ async def analyzeImage(prompt: str = Form(...), file: UploadFile = File(...)):
         wordLengths = []
         for i in range(0, len(wordList)):
             wordLengths.append(len(wordList[i]))
+
+        # 분석 결과 저장 로직 추가
+        saveAnalysisResult(prompt, useModel, analysisResult)
 
         return {
             "success": True,
