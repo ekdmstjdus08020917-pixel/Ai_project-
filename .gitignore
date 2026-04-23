@@ -13,3 +13,4 @@ dataset/
 venv/
 .venv/
 
+node_modules
